@@ -151,54 +151,54 @@ netstat –anp | grep 8080
 package main
 
 import (
-	"github.com/go-kit/kit/endpoint"
 	"context"
 	"encoding/json"
-	"net/http"
-	"log"
 	httptransport "github.com/go-kit/kit/transport/http"
+	"github.com/pkg/errors"
+	"log"
+	"net/http"
 )
 
-func makeUppercaseEndpoint() endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
+func InfoEndpoint(_ context.Context, request interface{}) (interface{}, error) {
+	req := request.(InfoRequest)
 
-		return uppercaseResponse{"a", ""}, nil
+	return InfoResponse{1, "", req.Str}, nil
+}
+
+type InfoRequest struct {
+	Str string
+}
+
+type InfoResponse struct {
+	ErrCode int    `json:"errCode"`
+	ErrMsg  string `json:"errMsg"`
+	Data    string `json:"data"`
+}
+
+func decodeRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	var request InfoRequest
+	r.ParseForm()
+
+	if len(r.Form["string"]) > 0 {
+		request.Str = r.Form["string"][0]
+		return request, nil
+	} else {
+		return request, errors.New("string not exists")
 	}
 }
 
-type uppercaseResponse struct {
-	V   string `json:"v"`
-	Err string `json:"err,omitempty"` // errors don't define JSON marshaling
+func encodeResponse(_ context.Context, w http.ResponseWriter, response interface{}) error {
+	return json.NewEncoder(w).Encode(response)
 }
 
 func main() {
-	uppercaseHandler := httptransport.NewServer(
-		makeUppercaseEndpoint(),
-		decodeUppercaseRequest,
-		encodeResponseT,
-	)
-
-	http.Handle("/info", uppercaseHandler)
+	http.Handle("/info", httptransport.NewServer(InfoEndpoint, decodeRequest, encodeResponse))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-// For each method, we define request and response structs
-type uppercaseRequest struct {
-	S string `json:"s"`
-}
-
-func decodeUppercaseRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var request uppercaseRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		//return uppercaseRequest{"a"}, nil
-		return nil, err
-	}
-	return request, nil
-}
-
-func encodeResponseT(_ context.Context, w http.ResponseWriter, response interface{}) error {
-	return json.NewEncoder(w).Encode(response)
-}
 ```
-未完代续
 ## 学习笔记
+主要分为3部分
+- endpont 服务节点，接收decode之后的request，返回 response
+- request 包含 request 内容 及request 的 decode函数
+- response 包含 response 结果及 response  的 encode 函数
